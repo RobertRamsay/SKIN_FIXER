@@ -1,0 +1,477 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Skin Fixer Tooling <tooling@skinfixer.local>
+Date: Sun, 23 Aug 2026 08:45:26 +0000
+Subject: [PATCH] feat: workspace inspector, add-to-current-scene
+
+Gives the workspace object real controls, and makes it possible to add the rig
+to a scene you already have rather than generating a fresh one.
+
+New:
+- SkinFixerWorkspaceEditor: custom inspector for the workspace object. Lists
+  every skinned renderer under the Models root with vertex and bone counts,
+  warns when a mesh is not readable, and opens the Weight Editor already bound
+  to a chosen renderer. Key, fill and rim intensity sliders plus a rig rotation
+  slider sit alongside, since raking the key light across a joint is the fastest
+  way to spot a collapsing silhouette. Raw component references stay available
+  behind a foldout.
+
+Changed:
+- WorkspaceSceneBuilder gains Add Workspace To Current Scene. It adopts an
+  existing main camera and the first directional light instead of leaving
+  duplicates behind, so a stock Unity scene converts cleanly. All adopted
+  objects are recorded for undo.
+- BuildContents takes an adoptExisting flag; camera and key light creation now
+  reuse rather than always constructing.
+- SkinWeightToolsWindow.ShowWindow returns the window, and a new OpenWith
+  binds it to a renderer directly.
+---
+ .../Editor/SkinFixerWorkspaceEditor.cs        | 194 ++++++++++++++++++
+ .../Editor/SkinFixerWorkspaceEditor.cs.meta   |  11 +
+ .../Editor/SkinWeightToolsWindow.cs           |  17 +-
+ .../Editor/WorkspaceSceneBuilder.cs           | 112 ++++++++--
+ 4 files changed, 320 insertions(+), 14 deletions(-)
+ create mode 100644 Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs
+ create mode 100644 Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs.meta
+
+diff --git a/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs b/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs
+new file mode 100644
+index 0000000..21e5bb9
+--- /dev/null
++++ b/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs
+@@ -0,0 +1,194 @@
++using System.Collections.Generic;
++using UnityEditor;
++using UnityEngine;
++
++namespace SkinWeightTools.EditorTools
++{
++    /// <summary>
++    /// Inspector for the workspace object. Surfaces the controls that matter while judging
++    /// deformation, so the common loop does not require bouncing between the hierarchy, the
++    /// lighting objects and the Weight Editor window.
++    /// </summary>
++    [CustomEditor(typeof(SkinFixerWorkspace))]
++    public class SkinFixerWorkspaceEditor : Editor
++    {
++        private bool showRawReferences = false;
++        private List<SkinnedMeshRenderer> cachedRenderers = new List<SkinnedMeshRenderer>();
++
++        public override void OnInspectorGUI()
++        {
++            SkinFixerWorkspace workspace = target as SkinFixerWorkspace;
++
++            if (workspace == null)
++            {
++                return;
++            }
++
++            DrawModelSection(workspace);
++            EditorGUILayout.Space();
++
++            DrawViewSection(workspace);
++            EditorGUILayout.Space();
++
++            DrawLightingSection(workspace);
++            EditorGUILayout.Space();
++
++            showRawReferences = EditorGUILayout.Foldout(showRawReferences, "Raw references", true);
++
++            if (showRawReferences == true)
++            {
++                DrawDefaultInspector();
++            }
++        }
++
++        private void DrawModelSection(SkinFixerWorkspace workspace)
++        {
++            EditorGUILayout.LabelField("Models", EditorStyles.boldLabel);
++
++            if (workspace.modelRoot == null)
++            {
++                EditorGUILayout.HelpBox(
++                    "No Models root assigned. Assign one under Raw references, or rebuild the workspace from Tools > Skin Weight Tools.",
++                    MessageType.Warning);
++                return;
++            }
++
++            cachedRenderers.Clear();
++            workspace.modelRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true, cachedRenderers);
++
++            if (cachedRenderers.Count == 0)
++            {
++                EditorGUILayout.HelpBox(
++                    "Nothing loaded. Use Import model file on the Weight Editor's Source tab, or drag a rig under the Models object.",
++                    MessageType.Info);
++            }
++
++            for (int index = 0; index < cachedRenderers.Count; index++)
++            {
++                SkinnedMeshRenderer renderer = cachedRenderers[index];
++
++                if (renderer == null)
++                {
++                    continue;
++                }
++
++                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
++                EditorGUILayout.LabelField(renderer.name, EditorStyles.boldLabel);
++
++                Mesh mesh = renderer.sharedMesh;
++
++                if (mesh == null)
++                {
++                    EditorGUILayout.LabelField("No mesh assigned.", EditorStyles.miniLabel);
++                }
++
++                if (mesh != null)
++                {
++                    EditorGUILayout.LabelField(
++                        "Vertices " + mesh.vertexCount.ToString() + "   Bones " + renderer.bones.Length.ToString(),
++                        EditorStyles.miniLabel);
++
++                    if (mesh.isReadable == false)
++                    {
++                        EditorGUILayout.HelpBox(
++                            "Mesh is not readable. Enable Read/Write on its model importer before editing weights.",
++                            MessageType.Warning);
++                    }
++                }
++
++                EditorGUILayout.BeginHorizontal();
++
++                if (GUILayout.Button("Edit weights") == true)
++                {
++                    SkinWeightToolsWindow.OpenWith(renderer);
++                }
++
++                if (GUILayout.Button("Select") == true)
++                {
++                    Selection.activeGameObject = renderer.gameObject;
++                }
++
++                EditorGUILayout.EndHorizontal();
++                EditorGUILayout.EndVertical();
++            }
++        }
++
++        private void DrawViewSection(SkinFixerWorkspace workspace)
++        {
++            EditorGUILayout.LabelField("View", EditorStyles.boldLabel);
++
++            EditorGUILayout.BeginHorizontal();
++
++            if (GUILayout.Button("Open Weight Editor") == true)
++            {
++                SkinWeightToolsWindow.ShowWindow();
++            }
++
++            if (GUILayout.Button("Frame model") == true)
++            {
++                bool framed = WorkspaceSceneBuilder.FrameModel(workspace);
++
++                if (framed == false)
++                {
++                    Debug.Log("Skin Fixer: nothing under the Models root to frame yet.");
++                }
++            }
++
++            EditorGUILayout.EndHorizontal();
++
++            if (workspace.groundPlane != null)
++            {
++                bool groundVisible = workspace.groundPlane.activeSelf;
++                bool nextVisible = EditorGUILayout.Toggle("Ground reference", groundVisible);
++
++                if (nextVisible != groundVisible)
++                {
++                    Undo.RecordObject(workspace.groundPlane, "Toggle Ground");
++                    workspace.SetGroundVisible(nextVisible);
++                    EditorUtility.SetDirty(workspace.groundPlane);
++                }
++            }
++        }
++
++        private void DrawLightingSection(SkinFixerWorkspace workspace)
++        {
++            EditorGUILayout.LabelField("Lighting", EditorStyles.boldLabel);
++            EditorGUILayout.LabelField(
++                "Raking the key light across a joint is the quickest way to spot a collapsing silhouette.",
++                EditorStyles.wordWrappedMiniLabel);
++
++            DrawLightSlider("Key", workspace.keyLight, 3f);
++            DrawLightSlider("Fill", workspace.fillLight, 2f);
++            DrawLightSlider("Rim", workspace.rimLight, 3f);
++
++            if (workspace.lightingRoot != null)
++            {
++                float currentYaw = workspace.lightingRoot.localEulerAngles.y;
++                float nextYaw = EditorGUILayout.Slider("Rig rotation", currentYaw, 0f, 360f);
++
++                if (Mathf.Approximately(nextYaw, currentYaw) == false)
++                {
++                    Undo.RecordObject(workspace.lightingRoot, "Rotate Light Rig");
++                    workspace.lightingRoot.localEulerAngles = new Vector3(0f, nextYaw, 0f);
++                }
++            }
++        }
++
++        private void DrawLightSlider(string label, Light light, float maximum)
++        {
++            if (light == null)
++            {
++                return;
++            }
++
++            float nextIntensity = EditorGUILayout.Slider(label, light.intensity, 0f, maximum);
++
++            if (Mathf.Approximately(nextIntensity, light.intensity) == false)
++            {
++                Undo.RecordObject(light, "Set Light Intensity");
++                light.intensity = nextIntensity;
++                EditorUtility.SetDirty(light);
++            }
++        }
++    }
++}
+diff --git a/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs.meta b/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs.meta
+new file mode 100644
+index 0000000..3549a9c
+--- /dev/null
++++ b/Assets/SkinWeightTools/Editor/SkinFixerWorkspaceEditor.cs.meta
+@@ -0,0 +1,11 @@
++fileFormatVersion: 2
++guid: 4a7d95a8da2a3643c67552740c3186fd
++MonoImporter:
++  externalObjects: {}
++  serializedVersion: 2
++  defaultReferences: []
++  executionOrder: 0
++  icon: {instanceID: 0}
++  userData: 
++  assetBundleName: 
++  assetBundleVariant: 
+diff --git a/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs b/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
+index a6c7feb..cbd39fa 100644
+--- a/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
++++ b/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
+@@ -37,13 +37,26 @@ namespace SkinWeightTools.EditorTools
+ 
+         private string statusMessage = "Select a Skinned Mesh Renderer to begin.";
+ 
+-        [MenuItem("Tools/Skin Weight Tools/Weight Editor")]
+-        public static void ShowWindow()
++        [MenuItem("Tools/Skin Weight Tools/Weight Editor", false, 0)]
++        public static SkinWeightToolsWindow ShowWindow()
+         {
+             SkinWeightToolsWindow window = GetWindow<SkinWeightToolsWindow>();
+             window.titleContent = new GUIContent("Skin Weights");
+             window.minSize = new Vector2(420f, 520f);
+             window.Show();
++            return window;
++        }
++
++        /// <summary>Opens the window already bound to a renderer, ready to analyse.</summary>
++        public static SkinWeightToolsWindow OpenWith(SkinnedMeshRenderer renderer)
++        {
++            SkinWeightToolsWindow window = ShowWindow();
++            window.targetRenderer = renderer;
++            window.targetAnimator = null;
++            window.BindRenderer();
++            window.activeTab = ToolTab.Source;
++            window.Repaint();
++            return window;
+         }
+ 
+         private void OnGUI()
+diff --git a/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
+index 4fc0cfe..568f62b 100644
+--- a/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
++++ b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
+@@ -27,6 +27,34 @@ namespace SkinWeightTools.EditorTools
+             CreateWorkspaceScene(true);
+         }
+ 
++        /// <summary>
++        /// Adds the workspace rig to whatever scene is already open, adopting an existing
++        /// main camera and directional light rather than leaving duplicates behind. Use this
++        /// when you already have a scene you want to keep.
++        /// </summary>
++        [MenuItem("Tools/Skin Weight Tools/Add Workspace To Current Scene", false, 21)]
++        public static void AddWorkspaceToCurrentSceneMenu()
++        {
++            SkinFixerWorkspace existing = SkinFixerWorkspace.FindInScene();
++
++            if (existing != null)
++            {
++                Selection.activeGameObject = existing.gameObject;
++                EditorUtility.DisplayDialog(
++                    "Workspace already present",
++                    "This scene already contains a Skin Fixer workspace. It has been selected in the hierarchy.",
++                    "OK");
++                return;
++            }
++
++            SkinFixerWorkspace workspace = BuildContents(true);
++            Undo.RegisterCreatedObjectUndo(workspace.gameObject, "Add Skin Fixer Workspace");
++            ApplyRenderSettings();
++            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
++
++            Debug.Log("Skin Fixer workspace added to the open scene. Save the scene to keep it.");
++        }
++
+         /// <summary>Returns the saved scene path, or an empty string when the user cancels.</summary>
+         public static string CreateWorkspaceScene(bool promptOnOverwrite)
+         {
+@@ -53,7 +81,7 @@ namespace SkinWeightTools.EditorTools
+ 
+             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+ 
+-            BuildContents();
++            BuildContents(false);
+             ApplyRenderSettings();
+ 
+             if (Directory.Exists(SceneFolder) == false)
+@@ -76,7 +104,7 @@ namespace SkinWeightTools.EditorTools
+             return ScenePath;
+         }
+ 
+-        private static SkinFixerWorkspace BuildContents()
++        private static SkinFixerWorkspace BuildContents(bool adoptExisting)
+         {
+             GameObject root = new GameObject("SkinFixer Workspace");
+             SkinFixerWorkspace workspace = root.AddComponent<SkinFixerWorkspace>();
+@@ -89,13 +117,21 @@ namespace SkinWeightTools.EditorTools
+             lightingRoot.transform.SetParent(root.transform, false);
+             workspace.lightingRoot = lightingRoot.transform;
+ 
++            Light adoptedKey = null;
++
++            if (adoptExisting == true)
++            {
++                adoptedKey = FindExistingDirectionalLight();
++            }
++
+             workspace.keyLight = CreateDirectionalLight(
+                 lightingRoot.transform,
+                 "Key Light",
+                 new Vector3(48f, 145f, 0f),
+                 new Color(1f, 0.976f, 0.937f, 1f),
+                 1.35f,
+-                LightShadows.Soft);
++                LightShadows.Soft,
++                adoptedKey);
+ 
+             workspace.fillLight = CreateDirectionalLight(
+                 lightingRoot.transform,
+@@ -103,7 +139,8 @@ namespace SkinWeightTools.EditorTools
+                 new Vector3(22f, 225f, 0f),
+                 new Color(0.804f, 0.867f, 1f, 1f),
+                 0.45f,
+-                LightShadows.None);
++                LightShadows.None,
++                null);
+ 
+             workspace.rimLight = CreateDirectionalLight(
+                 lightingRoot.transform,
+@@ -111,28 +148,60 @@ namespace SkinWeightTools.EditorTools
+                 new Vector3(12f, 20f, 0f),
+                 new Color(1f, 0.941f, 0.855f, 1f),
+                 0.85f,
+-                LightShadows.None);
++                LightShadows.None,
++                null);
+ 
+             workspace.groundPlane = CreateGround(root.transform);
+-            workspace.previewCamera = CreateCamera(root.transform, workspace.expectedModelHeight);
++            workspace.previewCamera = CreateCamera(root.transform, workspace.expectedModelHeight, adoptExisting);
+ 
+             Selection.activeGameObject = root;
+             return workspace;
+         }
+ 
++        /// <summary>First directional light in the open scene, or null when there is none.</summary>
++        private static Light FindExistingDirectionalLight()
++        {
++            Light[] lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
++
++            for (int index = 0; index < lights.Length; index++)
++            {
++                if (lights[index].type == LightType.Directional)
++                {
++                    return lights[index];
++                }
++            }
++
++            return null;
++        }
++
+         private static Light CreateDirectionalLight(
+             Transform parent,
+             string name,
+             Vector3 eulerAngles,
+             Color colour,
+             float intensity,
+-            LightShadows shadows)
++            LightShadows shadows,
++            Light adopted)
+         {
+-            GameObject lightObject = new GameObject(name);
++            GameObject lightObject = null;
++            Light light = adopted;
++
++            if (light != null)
++            {
++                lightObject = light.gameObject;
++                Undo.RecordObject(light, "Configure Skin Fixer Light");
++                Undo.RecordObject(lightObject.transform, "Configure Skin Fixer Light");
++            }
++
++            if (light == null)
++            {
++                lightObject = new GameObject(name);
++                light = lightObject.AddComponent<Light>();
++            }
++
+             lightObject.transform.SetParent(parent, false);
+             lightObject.transform.rotation = Quaternion.Euler(eulerAngles);
+ 
+-            Light light = lightObject.AddComponent<Light>();
+             light.type = LightType.Directional;
+             light.color = colour;
+             light.intensity = intensity;
+@@ -160,13 +229,32 @@ namespace SkinWeightTools.EditorTools
+             return ground;
+         }
+ 
+-        private static Camera CreateCamera(Transform parent, float expectedHeight)
++        private static Camera CreateCamera(Transform parent, float expectedHeight, bool adoptExisting)
+         {
+-            GameObject cameraObject = new GameObject("Preview Camera");
++            GameObject cameraObject = null;
++            Camera camera = null;
++
++            if (adoptExisting == true)
++            {
++                camera = Camera.main;
++            }
++
++            if (camera != null)
++            {
++                cameraObject = camera.gameObject;
++                Undo.RecordObject(camera, "Configure Skin Fixer Camera");
++                Undo.RecordObject(cameraObject.transform, "Configure Skin Fixer Camera");
++            }
++
++            if (camera == null)
++            {
++                cameraObject = new GameObject("Preview Camera");
++                camera = cameraObject.AddComponent<Camera>();
++            }
++
+             cameraObject.transform.SetParent(parent, false);
+             cameraObject.tag = "MainCamera";
+ 
+-            Camera camera = cameraObject.AddComponent<Camera>();
+             camera.clearFlags = CameraClearFlags.SolidColor;
+             camera.backgroundColor = BackgroundColour;
+             camera.fieldOfView = 40f;

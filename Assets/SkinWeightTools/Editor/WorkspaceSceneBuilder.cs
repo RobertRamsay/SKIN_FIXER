@@ -27,6 +27,34 @@ namespace SkinWeightTools.EditorTools
             CreateWorkspaceScene(true);
         }
 
+        /// <summary>
+        /// Adds the workspace rig to whatever scene is already open, adopting an existing
+        /// main camera and directional light rather than leaving duplicates behind. Use this
+        /// when you already have a scene you want to keep.
+        /// </summary>
+        [MenuItem("Tools/Skin Weight Tools/Add Workspace To Current Scene", false, 21)]
+        public static void AddWorkspaceToCurrentSceneMenu()
+        {
+            SkinFixerWorkspace existing = SkinFixerWorkspace.FindInScene();
+
+            if (existing != null)
+            {
+                Selection.activeGameObject = existing.gameObject;
+                EditorUtility.DisplayDialog(
+                    "Workspace already present",
+                    "This scene already contains a Skin Fixer workspace. It has been selected in the hierarchy.",
+                    "OK");
+                return;
+            }
+
+            SkinFixerWorkspace workspace = BuildContents(true);
+            Undo.RegisterCreatedObjectUndo(workspace.gameObject, "Add Skin Fixer Workspace");
+            ApplyRenderSettings();
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+
+            Debug.Log("Skin Fixer workspace added to the open scene. Save the scene to keep it.");
+        }
+
         /// <summary>Returns the saved scene path, or an empty string when the user cancels.</summary>
         public static string CreateWorkspaceScene(bool promptOnOverwrite)
         {
@@ -53,7 +81,7 @@ namespace SkinWeightTools.EditorTools
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            BuildContents();
+            BuildContents(false);
             ApplyRenderSettings();
 
             if (Directory.Exists(SceneFolder) == false)
@@ -76,7 +104,7 @@ namespace SkinWeightTools.EditorTools
             return ScenePath;
         }
 
-        private static SkinFixerWorkspace BuildContents()
+        private static SkinFixerWorkspace BuildContents(bool adoptExisting)
         {
             GameObject root = new GameObject("SkinFixer Workspace");
             SkinFixerWorkspace workspace = root.AddComponent<SkinFixerWorkspace>();
@@ -89,13 +117,21 @@ namespace SkinWeightTools.EditorTools
             lightingRoot.transform.SetParent(root.transform, false);
             workspace.lightingRoot = lightingRoot.transform;
 
+            Light adoptedKey = null;
+
+            if (adoptExisting == true)
+            {
+                adoptedKey = FindExistingDirectionalLight();
+            }
+
             workspace.keyLight = CreateDirectionalLight(
                 lightingRoot.transform,
                 "Key Light",
                 new Vector3(48f, 145f, 0f),
                 new Color(1f, 0.976f, 0.937f, 1f),
                 1.35f,
-                LightShadows.Soft);
+                LightShadows.Soft,
+                adoptedKey);
 
             workspace.fillLight = CreateDirectionalLight(
                 lightingRoot.transform,
@@ -103,7 +139,8 @@ namespace SkinWeightTools.EditorTools
                 new Vector3(22f, 225f, 0f),
                 new Color(0.804f, 0.867f, 1f, 1f),
                 0.45f,
-                LightShadows.None);
+                LightShadows.None,
+                null);
 
             workspace.rimLight = CreateDirectionalLight(
                 lightingRoot.transform,
@@ -111,13 +148,30 @@ namespace SkinWeightTools.EditorTools
                 new Vector3(12f, 20f, 0f),
                 new Color(1f, 0.941f, 0.855f, 1f),
                 0.85f,
-                LightShadows.None);
+                LightShadows.None,
+                null);
 
             workspace.groundPlane = CreateGround(root.transform);
-            workspace.previewCamera = CreateCamera(root.transform, workspace.expectedModelHeight);
+            workspace.previewCamera = CreateCamera(root.transform, workspace.expectedModelHeight, adoptExisting);
 
             Selection.activeGameObject = root;
             return workspace;
+        }
+
+        /// <summary>First directional light in the open scene, or null when there is none.</summary>
+        private static Light FindExistingDirectionalLight()
+        {
+            Light[] lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+
+            for (int index = 0; index < lights.Length; index++)
+            {
+                if (lights[index].type == LightType.Directional)
+                {
+                    return lights[index];
+                }
+            }
+
+            return null;
         }
 
         private static Light CreateDirectionalLight(
@@ -126,13 +180,28 @@ namespace SkinWeightTools.EditorTools
             Vector3 eulerAngles,
             Color colour,
             float intensity,
-            LightShadows shadows)
+            LightShadows shadows,
+            Light adopted)
         {
-            GameObject lightObject = new GameObject(name);
+            GameObject lightObject = null;
+            Light light = adopted;
+
+            if (light != null)
+            {
+                lightObject = light.gameObject;
+                Undo.RecordObject(light, "Configure Skin Fixer Light");
+                Undo.RecordObject(lightObject.transform, "Configure Skin Fixer Light");
+            }
+
+            if (light == null)
+            {
+                lightObject = new GameObject(name);
+                light = lightObject.AddComponent<Light>();
+            }
+
             lightObject.transform.SetParent(parent, false);
             lightObject.transform.rotation = Quaternion.Euler(eulerAngles);
 
-            Light light = lightObject.AddComponent<Light>();
             light.type = LightType.Directional;
             light.color = colour;
             light.intensity = intensity;
@@ -160,13 +229,32 @@ namespace SkinWeightTools.EditorTools
             return ground;
         }
 
-        private static Camera CreateCamera(Transform parent, float expectedHeight)
+        private static Camera CreateCamera(Transform parent, float expectedHeight, bool adoptExisting)
         {
-            GameObject cameraObject = new GameObject("Preview Camera");
+            GameObject cameraObject = null;
+            Camera camera = null;
+
+            if (adoptExisting == true)
+            {
+                camera = Camera.main;
+            }
+
+            if (camera != null)
+            {
+                cameraObject = camera.gameObject;
+                Undo.RecordObject(camera, "Configure Skin Fixer Camera");
+                Undo.RecordObject(cameraObject.transform, "Configure Skin Fixer Camera");
+            }
+
+            if (camera == null)
+            {
+                cameraObject = new GameObject("Preview Camera");
+                camera = cameraObject.AddComponent<Camera>();
+            }
+
             cameraObject.transform.SetParent(parent, false);
             cameraObject.tag = "MainCamera";
 
-            Camera camera = cameraObject.AddComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = BackgroundColour;
             camera.fieldOfView = 40f;

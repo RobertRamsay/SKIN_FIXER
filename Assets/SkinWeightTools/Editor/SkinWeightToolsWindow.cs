@@ -37,13 +37,26 @@ namespace SkinWeightTools.EditorTools
 
         private string statusMessage = "Select a Skinned Mesh Renderer to begin.";
 
-        [MenuItem("Tools/Skin Weight Tools/Weight Editor")]
-        public static void ShowWindow()
+        [MenuItem("Tools/Skin Weight Tools/Weight Editor", false, 0)]
+        public static SkinWeightToolsWindow ShowWindow()
         {
             SkinWeightToolsWindow window = GetWindow<SkinWeightToolsWindow>();
             window.titleContent = new GUIContent("Skin Weights");
             window.minSize = new Vector2(420f, 520f);
             window.Show();
+            return window;
+        }
+
+        /// <summary>Opens the window already bound to a renderer, ready to analyse.</summary>
+        public static SkinWeightToolsWindow OpenWith(SkinnedMeshRenderer renderer)
+        {
+            SkinWeightToolsWindow window = ShowWindow();
+            window.targetRenderer = renderer;
+            window.targetAnimator = null;
+            window.BindRenderer();
+            window.activeTab = ToolTab.Source;
+            window.Repaint();
+            return window;
         }
 
         private void OnGUI()
