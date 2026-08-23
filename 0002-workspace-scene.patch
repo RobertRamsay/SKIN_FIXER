@@ -1,0 +1,1035 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Skin Fixer Tooling <tooling@skinfixer.local>
+Date: Sun, 23 Aug 2026 08:08:19 +0000
+Subject: [PATCH] feat: workspace scene builder, remove SampleScene
+
+Adds a generated workspace scene for reviewing skin deformation, and clears the
+URP template's SampleScene out of the project.
+
+The scene is built by script rather than shipped as a hand written .unity file.
+Unity writes YAML for the exact editor version in use, the scene can be rebuilt
+at any time from Tools > Skin Weight Tools > Create Workspace Scene, and the
+patch stays reviewable.
+
+New:
+- SkinFixerWorkspace (Runtime): scene marker holding the Models root, preview
+  camera, three light rig and ground reference. Exposes TryGetModelBounds so the
+  tooling can frame whatever is loaded regardless of model scale.
+- WorkspaceSceneBuilder (Editor): builds and saves the scene to
+  Assets/SkinWeightTools/Scenes/SkinFixer_Workspace.unity. Neutral grey
+  background and flat ambient so shading reads honestly, key/fill/rim
+  directional lights with shadows on the key only, and a ground plane with its
+  collider stripped. URP companion components are attached by reflected type
+  name, so the tool still compiles in a Built-in or HDRP project.
+
+Changed:
+- SkinnedMeshImportUtility parents imports under the workspace Models root and
+  frames them on arrival, when a workspace is present in the scene.
+- SkinWeightToolsWindow gains a Workspace section on the Source tab: create the
+  scene, frame the model, toggle the ground plane.
+
+Removed:
+- Assets/Scenes/SampleScene.unity and its meta, plus the now empty Scenes folder.
+- The SampleScene entry in EditorBuildSettings, leaving m_Scenes empty.
+---
+ Assets/Scenes.meta                            |   8 -
+ Assets/Scenes/SampleScene.unity               | 432 ------------------
+ Assets/Scenes/SampleScene.unity.meta          |   7 -
+ .../Editor/SkinWeightToolsWindow.cs           |  58 +++
+ .../Editor/SkinnedMeshImportUtility.cs        |  12 +
+ .../Editor/WorkspaceSceneBuilder.cs           | 265 +++++++++++
+ .../Editor/WorkspaceSceneBuilder.cs.meta      |  11 +
+ .../Runtime/SkinFixerWorkspace.cs             |  88 ++++
+ .../Runtime/SkinFixerWorkspace.cs.meta        |  11 +
+ ProjectSettings/EditorBuildSettings.asset     |   5 +-
+ 10 files changed, 446 insertions(+), 451 deletions(-)
+ delete mode 100644 Assets/Scenes.meta
+ delete mode 100644 Assets/Scenes/SampleScene.unity
+ delete mode 100644 Assets/Scenes/SampleScene.unity.meta
+ create mode 100644 Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
+ create mode 100644 Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs.meta
+ create mode 100644 Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs
+ create mode 100644 Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs.meta
+
+diff --git a/Assets/Scenes.meta b/Assets/Scenes.meta
+deleted file mode 100644
+index 181328b..0000000
+--- a/Assets/Scenes.meta
++++ /dev/null
+@@ -1,8 +0,0 @@
+-fileFormatVersion: 2
+-guid: 8756096e3cad5214b9075b04504f28e2
+-folderAsset: yes
+-DefaultImporter:
+-  externalObjects: {}
+-  userData: 
+-  assetBundleName: 
+-  assetBundleVariant: 
+diff --git a/Assets/Scenes/SampleScene.unity b/Assets/Scenes/SampleScene.unity
+deleted file mode 100644
+index 1c63aa8..0000000
+--- a/Assets/Scenes/SampleScene.unity
++++ /dev/null
+@@ -1,432 +0,0 @@
+-%YAML 1.1
+-%TAG !u! tag:unity3d.com,2011:
+---- !u!29 &1
+-OcclusionCullingSettings:
+-  m_ObjectHideFlags: 0
+-  serializedVersion: 2
+-  m_OcclusionBakeSettings:
+-    smallestOccluder: 5
+-    smallestHole: 0.25
+-    backfaceThreshold: 100
+-  m_SceneGUID: 00000000000000000000000000000000
+-  m_OcclusionCullingData: {fileID: 0}
+---- !u!104 &2
+-RenderSettings:
+-  m_ObjectHideFlags: 0
+-  serializedVersion: 10
+-  m_Fog: 0
+-  m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+-  m_FogMode: 3
+-  m_FogDensity: 0.01
+-  m_LinearFogStart: 0
+-  m_LinearFogEnd: 300
+-  m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
+-  m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
+-  m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
+-  m_AmbientIntensity: 1
+-  m_AmbientMode: 0
+-  m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
+-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+-  m_HaloStrength: 0.5
+-  m_FlareStrength: 1
+-  m_FlareFadeSpeed: 3
+-  m_HaloTexture: {fileID: 0}
+-  m_SpotCookie: {fileID: 10001, guid: 0000000000000000e000000000000000, type: 0}
+-  m_DefaultReflectionMode: 0
+-  m_DefaultReflectionResolution: 128
+-  m_ReflectionBounces: 1
+-  m_ReflectionIntensity: 1
+-  m_CustomReflection: {fileID: 0}
+-  m_Sun: {fileID: 0}
+-  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
+-  m_UseRadianceAmbientProbe: 0
+---- !u!157 &3
+-LightmapSettings:
+-  m_ObjectHideFlags: 0
+-  serializedVersion: 12
+-  m_GISettings:
+-    serializedVersion: 2
+-    m_BounceScale: 1
+-    m_IndirectOutputScale: 1
+-    m_AlbedoBoost: 1
+-    m_EnvironmentLightingMode: 0
+-    m_EnableBakedLightmaps: 1
+-    m_EnableRealtimeLightmaps: 0
+-  m_LightmapEditorSettings:
+-    serializedVersion: 12
+-    m_Resolution: 2
+-    m_BakeResolution: 40
+-    m_AtlasSize: 1024
+-    m_AO: 0
+-    m_AOMaxDistance: 1
+-    m_CompAOExponent: 1
+-    m_CompAOExponentDirect: 0
+-    m_ExtractAmbientOcclusion: 0
+-    m_Padding: 2
+-    m_LightmapParameters: {fileID: 0}
+-    m_LightmapsBakeMode: 1
+-    m_TextureCompression: 1
+-    m_ReflectionCompression: 2
+-    m_MixedBakeMode: 2
+-    m_BakeBackend: 1
+-    m_PVRSampling: 1
+-    m_PVRDirectSampleCount: 32
+-    m_PVRSampleCount: 512
+-    m_PVRBounces: 2
+-    m_PVREnvironmentSampleCount: 256
+-    m_PVREnvironmentReferencePointCount: 2048
+-    m_PVRFilteringMode: 1
+-    m_PVRDenoiserTypeDirect: 1
+-    m_PVRDenoiserTypeIndirect: 1
+-    m_PVRDenoiserTypeAO: 1
+-    m_PVRFilterTypeDirect: 0
+-    m_PVRFilterTypeIndirect: 0
+-    m_PVRFilterTypeAO: 0
+-    m_PVREnvironmentMIS: 1
+-    m_PVRCulling: 1
+-    m_PVRFilteringGaussRadiusDirect: 1
+-    m_PVRFilteringGaussRadiusIndirect: 5
+-    m_PVRFilteringGaussRadiusAO: 2
+-    m_PVRFilteringAtrousPositionSigmaDirect: 0.5
+-    m_PVRFilteringAtrousPositionSigmaIndirect: 2
+-    m_PVRFilteringAtrousPositionSigmaAO: 1
+-    m_ExportTrainingData: 0
+-    m_TrainingDataDestination: TrainingData
+-    m_LightProbeSampleCountMultiplier: 4
+-  m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
+-  m_LightingSettings: {fileID: 0}
+---- !u!196 &4
+-NavMeshSettings:
+-  serializedVersion: 2
+-  m_ObjectHideFlags: 0
+-  m_BuildSettings:
+-    serializedVersion: 3
+-    agentTypeID: 0
+-    agentRadius: 0.5
+-    agentHeight: 2
+-    agentSlope: 45
+-    agentClimb: 0.4
+-    ledgeDropHeight: 0
+-    maxJumpAcrossDistance: 0
+-    minRegionArea: 2
+-    manualCellSize: 0
+-    cellSize: 0.16666667
+-    manualTileSize: 0
+-    tileSize: 256
+-    buildHeightMesh: 0
+-    maxJobWorkers: 0
+-    preserveTilesOutsideBounds: 0
+-    debug:
+-      m_Flags: 0
+-  m_NavMeshData: {fileID: 0}
+---- !u!1 &330585543
+-GameObject:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  serializedVersion: 6
+-  m_Component:
+-  - component: {fileID: 330585546}
+-  - component: {fileID: 330585545}
+-  - component: {fileID: 330585544}
+-  - component: {fileID: 330585547}
+-  m_Layer: 0
+-  m_Name: Main Camera
+-  m_TagString: MainCamera
+-  m_Icon: {fileID: 0}
+-  m_NavMeshLayer: 0
+-  m_StaticEditorFlags: 0
+-  m_IsActive: 1
+---- !u!81 &330585544
+-AudioListener:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 330585543}
+-  m_Enabled: 1
+---- !u!20 &330585545
+-Camera:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 330585543}
+-  m_Enabled: 1
+-  serializedVersion: 2
+-  m_ClearFlags: 1
+-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+-  m_projectionMatrixMode: 1
+-  m_GateFitMode: 2
+-  m_FOVAxisMode: 0
+-  m_Iso: 200
+-  m_ShutterSpeed: 0.005
+-  m_Aperture: 16
+-  m_FocusDistance: 10
+-  m_FocalLength: 50
+-  m_BladeCount: 5
+-  m_Curvature: {x: 2, y: 11}
+-  m_BarrelClipping: 0.25
+-  m_Anamorphism: 0
+-  m_SensorSize: {x: 36, y: 24}
+-  m_LensShift: {x: 0, y: 0}
+-  m_NormalizedViewPortRect:
+-    serializedVersion: 2
+-    x: 0
+-    y: 0
+-    width: 1
+-    height: 1
+-  near clip plane: 0.3
+-  far clip plane: 1000
+-  field of view: 60
+-  orthographic: 0
+-  orthographic size: 5
+-  m_Depth: -1
+-  m_CullingMask:
+-    serializedVersion: 2
+-    m_Bits: 4294967295
+-  m_RenderingPath: -1
+-  m_TargetTexture: {fileID: 0}
+-  m_TargetDisplay: 0
+-  m_TargetEye: 3
+-  m_HDR: 1
+-  m_AllowMSAA: 1
+-  m_AllowDynamicResolution: 0
+-  m_ForceIntoRT: 0
+-  m_OcclusionCulling: 1
+-  m_StereoConvergence: 10
+-  m_StereoSeparation: 0.022
+---- !u!4 &330585546
+-Transform:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 330585543}
+-  serializedVersion: 2
+-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+-  m_LocalPosition: {x: 0, y: 1, z: -10}
+-  m_LocalScale: {x: 1, y: 1, z: 1}
+-  m_ConstrainProportionsScale: 0
+-  m_Children: []
+-  m_Father: {fileID: 0}
+-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+---- !u!114 &330585547
+-MonoBehaviour:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 330585543}
+-  m_Enabled: 1
+-  m_EditorHideFlags: 0
+-  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+-  m_Name: 
+-  m_EditorClassIdentifier: 
+-  m_RenderShadows: 1
+-  m_RequiresDepthTextureOption: 2
+-  m_RequiresOpaqueTextureOption: 2
+-  m_CameraType: 0
+-  m_Cameras: []
+-  m_RendererIndex: -1
+-  m_VolumeLayerMask:
+-    serializedVersion: 2
+-    m_Bits: 1
+-  m_VolumeTrigger: {fileID: 0}
+-  m_VolumeFrameworkUpdateModeOption: 2
+-  m_RenderPostProcessing: 1
+-  m_Antialiasing: 0
+-  m_AntialiasingQuality: 2
+-  m_StopNaN: 0
+-  m_Dithering: 0
+-  m_ClearDepth: 1
+-  m_AllowXRRendering: 1
+-  m_AllowHDROutput: 1
+-  m_UseScreenCoordOverride: 0
+-  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+-  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+-  m_RequiresDepthTexture: 0
+-  m_RequiresColorTexture: 0
+-  m_Version: 2
+-  m_TaaSettings:
+-    quality: 3
+-    frameInfluence: 0.1
+-    jitterScale: 1
+-    mipBias: 0
+-    varianceClampScale: 0.9
+-    contrastAdaptiveSharpening: 0
+---- !u!1 &410087039
+-GameObject:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  serializedVersion: 6
+-  m_Component:
+-  - component: {fileID: 410087041}
+-  - component: {fileID: 410087040}
+-  - component: {fileID: 410087042}
+-  m_Layer: 0
+-  m_Name: Directional Light
+-  m_TagString: Untagged
+-  m_Icon: {fileID: 0}
+-  m_NavMeshLayer: 0
+-  m_StaticEditorFlags: 0
+-  m_IsActive: 1
+---- !u!108 &410087040
+-Light:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 410087039}
+-  m_Enabled: 1
+-  serializedVersion: 11
+-  m_Type: 1
+-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+-  m_Intensity: 2
+-  m_Range: 10
+-  m_SpotAngle: 30
+-  m_InnerSpotAngle: 21.80208
+-  m_CookieSize: 10
+-  m_Shadows:
+-    m_Type: 2
+-    m_Resolution: -1
+-    m_CustomResolution: -1
+-    m_Strength: 1
+-    m_Bias: 0.05
+-    m_NormalBias: 0.4
+-    m_NearPlane: 0.2
+-    m_CullingMatrixOverride:
+-      e00: 1
+-      e01: 0
+-      e02: 0
+-      e03: 0
+-      e10: 0
+-      e11: 1
+-      e12: 0
+-      e13: 0
+-      e20: 0
+-      e21: 0
+-      e22: 1
+-      e23: 0
+-      e30: 0
+-      e31: 0
+-      e32: 0
+-      e33: 1
+-    m_UseCullingMatrixOverride: 0
+-  m_Cookie: {fileID: 0}
+-  m_DrawHalo: 0
+-  m_Flare: {fileID: 0}
+-  m_RenderMode: 0
+-  m_CullingMask:
+-    serializedVersion: 2
+-    m_Bits: 4294967295
+-  m_RenderingLayerMask: 1
+-  m_Lightmapping: 4
+-  m_LightShadowCasterMode: 0
+-  m_AreaSize: {x: 1, y: 1}
+-  m_BounceIntensity: 1
+-  m_ColorTemperature: 5000
+-  m_UseColorTemperature: 1
+-  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
+-  m_UseBoundingSphereOverride: 0
+-  m_UseViewFrustumForShadowCasterCull: 1
+-  m_ForceVisible: 0
+-  m_ShadowRadius: 0
+-  m_ShadowAngle: 0
+---- !u!4 &410087041
+-Transform:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 410087039}
+-  serializedVersion: 2
+-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+-  m_LocalPosition: {x: 0, y: 3, z: 0}
+-  m_LocalScale: {x: 1, y: 1, z: 1}
+-  m_ConstrainProportionsScale: 0
+-  m_Children: []
+-  m_Father: {fileID: 0}
+-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+---- !u!114 &410087042
+-MonoBehaviour:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 410087039}
+-  m_Enabled: 1
+-  m_EditorHideFlags: 0
+-  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+-  m_Name: 
+-  m_EditorClassIdentifier: 
+-  m_Version: 3
+-  m_UsePipelineSettings: 1
+-  m_AdditionalLightsShadowResolutionTier: 2
+-  m_LightLayerMask: 1
+-  m_RenderingLayers: 1
+-  m_CustomShadowLayers: 0
+-  m_ShadowLayerMask: 1
+-  m_ShadowRenderingLayers: 1
+-  m_LightCookieSize: {x: 1, y: 1}
+-  m_LightCookieOffset: {x: 0, y: 0}
+-  m_SoftShadowQuality: 1
+---- !u!1 &832575517
+-GameObject:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  serializedVersion: 6
+-  m_Component:
+-  - component: {fileID: 832575519}
+-  - component: {fileID: 832575518}
+-  m_Layer: 0
+-  m_Name: Global Volume
+-  m_TagString: Untagged
+-  m_Icon: {fileID: 0}
+-  m_NavMeshLayer: 0
+-  m_StaticEditorFlags: 0
+-  m_IsActive: 1
+---- !u!114 &832575518
+-MonoBehaviour:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 832575517}
+-  m_Enabled: 1
+-  m_EditorHideFlags: 0
+-  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+-  m_Name: 
+-  m_EditorClassIdentifier: 
+-  m_IsGlobal: 1
+-  priority: 0
+-  blendDistance: 0
+-  weight: 1
+-  sharedProfile: {fileID: 11400000, guid: 10fc4df2da32a41aaa32d77bc913491c, type: 2}
+---- !u!4 &832575519
+-Transform:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 832575517}
+-  serializedVersion: 2
+-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+-  m_LocalPosition: {x: 0, y: 0, z: 0}
+-  m_LocalScale: {x: 1, y: 1, z: 1}
+-  m_ConstrainProportionsScale: 0
+-  m_Children: []
+-  m_Father: {fileID: 0}
+-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+---- !u!1660057539 &9223372036854775807
+-SceneRoots:
+-  m_ObjectHideFlags: 0
+-  m_Roots:
+-  - {fileID: 330585546}
+-  - {fileID: 410087041}
+-  - {fileID: 832575519}
+diff --git a/Assets/Scenes/SampleScene.unity.meta b/Assets/Scenes/SampleScene.unity.meta
+deleted file mode 100644
+index 9531828..0000000
+--- a/Assets/Scenes/SampleScene.unity.meta
++++ /dev/null
+@@ -1,7 +0,0 @@
+-fileFormatVersion: 2
+-guid: 99c9720ab356a0642a771bea13969a05
+-DefaultImporter:
+-  externalObjects: {}
+-  userData: 
+-  assetBundleName: 
+-  assetBundleVariant: 
+diff --git a/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs b/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
+index 68550a5..a6c7feb 100644
+--- a/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
++++ b/Assets/SkinWeightTools/Editor/SkinWeightToolsWindow.cs
+@@ -108,6 +108,9 @@ namespace SkinWeightTools.EditorTools
+ 
+         private void DrawSourceTab()
+         {
++            DrawWorkspaceSection();
++
++            EditorGUILayout.Space();
+             EditorGUILayout.LabelField("Import", EditorStyles.boldLabel);
+             EditorGUILayout.LabelField(
+                 "FBX and USD use Unity's own importers. glTF and GLB need com.unity.cloud.gltfast.",
+@@ -172,6 +175,61 @@ namespace SkinWeightTools.EditorTools
+             }
+         }
+ 
++        private void DrawWorkspaceSection()
++        {
++            EditorGUILayout.LabelField("Workspace", EditorStyles.boldLabel);
++
++            SkinFixerWorkspace workspace = SkinFixerWorkspace.FindInScene();
++
++            if (workspace == null)
++            {
++                EditorGUILayout.LabelField(
++                    "No workspace in this scene. Creating one gives you a neutral three light rig, a preview camera and a Models root that imports drop into.",
++                    EditorStyles.wordWrappedMiniLabel);
++
++                if (GUILayout.Button("Create workspace scene") == true)
++                {
++                    string createdPath = WorkspaceSceneBuilder.CreateWorkspaceScene(true);
++
++                    if (string.IsNullOrEmpty(createdPath) == false)
++                    {
++                        BindRenderer();
++                        statusMessage = "Workspace scene created at " + createdPath + ".";
++                    }
++                }
++
++                return;
++            }
++
++            EditorGUILayout.LabelField("Workspace", workspace.gameObject.name);
++
++            EditorGUILayout.BeginHorizontal();
++
++            if (GUILayout.Button("Frame model") == true)
++            {
++                bool framed = WorkspaceSceneBuilder.FrameModel(workspace);
++
++                if (framed == false)
++                {
++                    statusMessage = "Nothing under the Models root to frame yet.";
++                }
++            }
++
++            if (workspace.groundPlane != null)
++            {
++                bool groundVisible = workspace.groundPlane.activeSelf;
++                bool nextVisible = GUILayout.Toggle(groundVisible, "Ground", EditorStyles.miniButton);
++
++                if (nextVisible != groundVisible)
++                {
++                    Undo.RecordObject(workspace.groundPlane, "Toggle Ground");
++                    workspace.SetGroundVisible(nextVisible);
++                }
++            }
++
++            EditorGUILayout.EndHorizontal();
++        }
++
+         private string DescribePackage(bool present)
+         {
+             if (present == true)
+diff --git a/Assets/SkinWeightTools/Editor/SkinnedMeshImportUtility.cs b/Assets/SkinWeightTools/Editor/SkinnedMeshImportUtility.cs
+index 0d76429..fa2bfc5 100644
+--- a/Assets/SkinWeightTools/Editor/SkinnedMeshImportUtility.cs
++++ b/Assets/SkinWeightTools/Editor/SkinnedMeshImportUtility.cs
+@@ -205,9 +205,21 @@ namespace SkinWeightTools.EditorTools
+             instance.name = prefab.name + " (SkinWeightTools)";
+             Undo.RegisterCreatedObjectUndo(instance, "Import Skinned Mesh");
+ 
++            SkinFixerWorkspace workspace = SkinFixerWorkspace.FindInScene();
++
++            if (workspace != null && workspace.modelRoot != null)
++            {
++                instance.transform.SetParent(workspace.modelRoot, false);
++            }
++
+             instance.GetComponentsInChildren<SkinnedMeshRenderer>(true, found);
+             Selection.activeGameObject = instance;
+ 
++            if (workspace != null)
++            {
++                WorkspaceSceneBuilder.FrameModel(workspace);
++            }
++
+             return found;
+         }
+ 
+diff --git a/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
+new file mode 100644
+index 0000000..4fc0cfe
+--- /dev/null
++++ b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs
+@@ -0,0 +1,265 @@
++using System;
++using System.IO;
++using UnityEditor;
++using UnityEditor.SceneManagement;
++using UnityEngine;
++using UnityEngine.Rendering;
++using UnityEngine.SceneManagement;
++
++namespace SkinWeightTools.EditorTools
++{
++    /// <summary>
++    /// Builds the workspace scene from script rather than shipping a hand written .unity
++    /// file. Unity writes YAML for the exact editor version in use, and the scene can be
++    /// regenerated at any time if it gets damaged.
++    /// </summary>
++    public static class WorkspaceSceneBuilder
++    {
++        public const string SceneFolder = "Assets/SkinWeightTools/Scenes";
++        public const string ScenePath = "Assets/SkinWeightTools/Scenes/SkinFixer_Workspace.unity";
++
++        private static readonly Color BackgroundColour = new Color(0.212f, 0.216f, 0.227f, 1f);
++        private static readonly Color AmbientColour = new Color(0.29f, 0.30f, 0.33f, 1f);
++
++        [MenuItem("Tools/Skin Weight Tools/Create Workspace Scene", false, 20)]
++        public static void CreateWorkspaceSceneMenu()
++        {
++            CreateWorkspaceScene(true);
++        }
++
++        /// <summary>Returns the saved scene path, or an empty string when the user cancels.</summary>
++        public static string CreateWorkspaceScene(bool promptOnOverwrite)
++        {
++            if (promptOnOverwrite == true && File.Exists(ScenePath) == true)
++            {
++                bool replace = EditorUtility.DisplayDialog(
++                    "Replace workspace scene",
++                    "A workspace scene already exists at\n\n" + ScenePath + "\n\nReplacing it discards anything you added to that scene.",
++                    "Replace",
++                    "Cancel");
++
++                if (replace == false)
++                {
++                    return string.Empty;
++                }
++            }
++
++            bool proceed = EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo();
++
++            if (proceed == false)
++            {
++                return string.Empty;
++            }
++
++            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
++
++            BuildContents();
++            ApplyRenderSettings();
++
++            if (Directory.Exists(SceneFolder) == false)
++            {
++                Directory.CreateDirectory(SceneFolder);
++                AssetDatabase.Refresh();
++            }
++
++            bool saved = EditorSceneManager.SaveScene(scene, ScenePath);
++
++            if (saved == false)
++            {
++                Debug.LogError("WorkspaceSceneBuilder: failed to save the scene to " + ScenePath);
++                return string.Empty;
++            }
++
++            AssetDatabase.Refresh();
++            Debug.Log("Skin Fixer workspace scene created at " + ScenePath);
++
++            return ScenePath;
++        }
++
++        private static SkinFixerWorkspace BuildContents()
++        {
++            GameObject root = new GameObject("SkinFixer Workspace");
++            SkinFixerWorkspace workspace = root.AddComponent<SkinFixerWorkspace>();
++
++            GameObject modelRoot = new GameObject("Models");
++            modelRoot.transform.SetParent(root.transform, false);
++            workspace.modelRoot = modelRoot.transform;
++
++            GameObject lightingRoot = new GameObject("Lighting");
++            lightingRoot.transform.SetParent(root.transform, false);
++            workspace.lightingRoot = lightingRoot.transform;
++
++            workspace.keyLight = CreateDirectionalLight(
++                lightingRoot.transform,
++                "Key Light",
++                new Vector3(48f, 145f, 0f),
++                new Color(1f, 0.976f, 0.937f, 1f),
++                1.35f,
++                LightShadows.Soft);
++
++            workspace.fillLight = CreateDirectionalLight(
++                lightingRoot.transform,
++                "Fill Light",
++                new Vector3(22f, 225f, 0f),
++                new Color(0.804f, 0.867f, 1f, 1f),
++                0.45f,
++                LightShadows.None);
++
++            workspace.rimLight = CreateDirectionalLight(
++                lightingRoot.transform,
++                "Rim Light",
++                new Vector3(12f, 20f, 0f),
++                new Color(1f, 0.941f, 0.855f, 1f),
++                0.85f,
++                LightShadows.None);
++
++            workspace.groundPlane = CreateGround(root.transform);
++            workspace.previewCamera = CreateCamera(root.transform, workspace.expectedModelHeight);
++
++            Selection.activeGameObject = root;
++            return workspace;
++        }
++
++        private static Light CreateDirectionalLight(
++            Transform parent,
++            string name,
++            Vector3 eulerAngles,
++            Color colour,
++            float intensity,
++            LightShadows shadows)
++        {
++            GameObject lightObject = new GameObject(name);
++            lightObject.transform.SetParent(parent, false);
++            lightObject.transform.rotation = Quaternion.Euler(eulerAngles);
++
++            Light light = lightObject.AddComponent<Light>();
++            light.type = LightType.Directional;
++            light.color = colour;
++            light.intensity = intensity;
++            light.shadows = shadows;
++
++            AddPipelineComponent(lightObject, "UnityEngine.Rendering.Universal.UniversalAdditionalLightData");
++
++            return light;
++        }
++
++        private static GameObject CreateGround(Transform parent)
++        {
++            GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
++            ground.name = "Ground Reference";
++            ground.transform.SetParent(parent, false);
++            ground.transform.localScale = new Vector3(1f, 1f, 1f);
++
++            Collider collider = ground.GetComponent<Collider>();
++
++            if (collider != null)
++            {
++                UnityEngine.Object.DestroyImmediate(collider);
++            }
++
++            return ground;
++        }
++
++        private static Camera CreateCamera(Transform parent, float expectedHeight)
++        {
++            GameObject cameraObject = new GameObject("Preview Camera");
++            cameraObject.transform.SetParent(parent, false);
++            cameraObject.tag = "MainCamera";
++
++            Camera camera = cameraObject.AddComponent<Camera>();
++            camera.clearFlags = CameraClearFlags.SolidColor;
++            camera.backgroundColor = BackgroundColour;
++            camera.fieldOfView = 40f;
++            camera.nearClipPlane = 0.01f;
++            camera.farClipPlane = 500f;
++
++            AddPipelineComponent(cameraObject, "UnityEngine.Rendering.Universal.UniversalAdditionalCameraData");
++
++            PlaceCameraForHeight(camera, expectedHeight);
++
++            return camera;
++        }
++
++        /// <summary>
++        /// Frames a subject of the given height standing on the ground plane. Characters
++        /// arrive at wildly different scales, so this is a starting point rather than a fit.
++        /// </summary>
++        public static void PlaceCameraForHeight(Camera camera, float height)
++        {
++            if (camera == null)
++            {
++                return;
++            }
++
++            float safeHeight = Mathf.Max(height, 0.01f);
++            Vector3 focus = new Vector3(0f, safeHeight * 0.55f, 0f);
++            Vector3 position = new Vector3(safeHeight * 0.9f, safeHeight * 0.75f, safeHeight * 1.9f);
++
++            camera.transform.position = position;
++            camera.transform.LookAt(focus);
++        }
++
++        /// <summary>
++        /// Adds a render pipeline companion component when the pipeline is installed.
++        /// Resolved by name so the tool does not take a hard dependency on URP and still
++        /// compiles in a Built-in or HDRP project.
++        /// </summary>
++        private static void AddPipelineComponent(GameObject target, string typeName)
++        {
++            Type componentType = Type.GetType(typeName + ", Unity.RenderPipelines.Universal.Runtime");
++
++            if (componentType == null)
++            {
++                return;
++            }
++
++            if (target.GetComponent(componentType) != null)
++            {
++                return;
++            }
++
++            target.AddComponent(componentType);
++        }
++
++        private static void ApplyRenderSettings()
++        {
++            RenderSettings.ambientMode = AmbientMode.Flat;
++            RenderSettings.ambientLight = AmbientColour;
++            RenderSettings.fog = false;
++        }
++
++        /// <summary>Points the preview camera and the Scene view at whatever is loaded.</summary>
++        public static bool FrameModel(SkinFixerWorkspace workspace)
++        {
++            if (workspace == null)
++            {
++                return false;
++            }
++
++            Bounds bounds = new Bounds(Vector3.zero, Vector3.one);
++            bool found = workspace.TryGetModelBounds(out bounds);
++
++            if (found == false)
++            {
++                return false;
++            }
++
++            float height = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z));
++
++            if (workspace.previewCamera != null)
++            {
++                float safeHeight = Mathf.Max(height, 0.01f);
++                Vector3 position = bounds.center + new Vector3(safeHeight * 0.9f, safeHeight * 0.35f, safeHeight * 1.9f);
++                workspace.previewCamera.transform.position = position;
++                workspace.previewCamera.transform.LookAt(bounds.center);
++            }
++
++            if (SceneView.lastActiveSceneView != null)
++            {
++                SceneView.lastActiveSceneView.Frame(bounds, false);
++            }
++
++            return true;
++        }
++    }
++}
+diff --git a/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs.meta b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs.meta
+new file mode 100644
+index 0000000..76fdf56
+--- /dev/null
++++ b/Assets/SkinWeightTools/Editor/WorkspaceSceneBuilder.cs.meta
+@@ -0,0 +1,11 @@
++fileFormatVersion: 2
++guid: 9c3209723323e243985e9c65e54e1b67
++MonoImporter:
++  externalObjects: {}
++  serializedVersion: 2
++  defaultReferences: []
++  executionOrder: 0
++  icon: {instanceID: 0}
++  userData: 
++  assetBundleName: 
++  assetBundleVariant: 
+diff --git a/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs b/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs
+new file mode 100644
+index 0000000..1ef15d2
+--- /dev/null
++++ b/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs
+@@ -0,0 +1,88 @@
++using UnityEngine;
++
++namespace SkinWeightTools
++{
++    /// <summary>
++    /// Marks a scene as a Skin Fixer workspace and holds the references the tooling needs.
++    /// Imported models are parented under modelRoot so the scene stays tidy across many
++    /// test imports, and the lighting rig can be adjusted without hunting through hierarchy.
++    /// </summary>
++    [DisallowMultipleComponent]
++    public class SkinFixerWorkspace : MonoBehaviour
++    {
++        [Tooltip("Imported skinned meshes are parented here.")]
++        public Transform modelRoot = null;
++
++        [Tooltip("Camera used to review deformation.")]
++        public Camera previewCamera = null;
++
++        [Tooltip("Parent of the three light rig.")]
++        public Transform lightingRoot = null;
++
++        public Light keyLight = null;
++        public Light fillLight = null;
++        public Light rimLight = null;
++
++        [Tooltip("Ground reference plane. Disabled for meshes that are not floor standing.")]
++        public GameObject groundPlane = null;
++
++        [Tooltip("Roughly how tall the model is expected to be, in metres. Used to place the camera.")]
++        public float expectedModelHeight = 1.8f;
++
++        public static SkinFixerWorkspace FindInScene()
++        {
++            return Object.FindFirstObjectByType<SkinFixerWorkspace>(FindObjectsInactive.Include);
++        }
++
++        /// <summary>Bounds of every renderer under modelRoot. Returns false when nothing is loaded.</summary>
++        public bool TryGetModelBounds(out Bounds bounds)
++        {
++            bounds = new Bounds(Vector3.zero, Vector3.one);
++
++            if (modelRoot == null)
++            {
++                return false;
++            }
++
++            Renderer[] renderers = modelRoot.GetComponentsInChildren<Renderer>(true);
++
++            if (renderers.Length == 0)
++            {
++                return false;
++            }
++
++            bool started = false;
++
++            for (int index = 0; index < renderers.Length; index++)
++            {
++                Renderer current = renderers[index];
++
++                if (current == null)
++                {
++                    continue;
++                }
++
++                if (started == false)
++                {
++                    bounds = current.bounds;
++                    started = true;
++                    continue;
++                }
++
++                bounds.Encapsulate(current.bounds);
++            }
++
++            return started;
++        }
++
++        public void SetGroundVisible(bool visible)
++        {
++            if (groundPlane == null)
++            {
++                return;
++            }
++
++            groundPlane.SetActive(visible);
++        }
++    }
++}
+diff --git a/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs.meta b/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs.meta
+new file mode 100644
+index 0000000..83df00e
+--- /dev/null
++++ b/Assets/SkinWeightTools/Runtime/SkinFixerWorkspace.cs.meta
+@@ -0,0 +1,11 @@
++fileFormatVersion: 2
++guid: aec49aba3c0032afbbaaa02aa324d33b
++MonoImporter:
++  externalObjects: {}
++  serializedVersion: 2
++  defaultReferences: []
++  executionOrder: 0
++  icon: {instanceID: 0}
++  userData: 
++  assetBundleName: 
++  assetBundleVariant: 
+diff --git a/ProjectSettings/EditorBuildSettings.asset b/ProjectSettings/EditorBuildSettings.asset
+index d057ba3..e93d9b0 100644
+--- a/ProjectSettings/EditorBuildSettings.asset
++++ b/ProjectSettings/EditorBuildSettings.asset
+@@ -4,10 +4,7 @@
+ EditorBuildSettings:
+   m_ObjectHideFlags: 0
+   serializedVersion: 2
+-  m_Scenes:
+-  - enabled: 1
+-    path: Assets/Scenes/SampleScene.unity
+-    guid: 99c9720ab356a0642a771bea13969a05
++  m_Scenes: []
+   m_configObjects:
+     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+   m_UseUCBPForAssetBundles: 0

@@ -205,8 +205,20 @@ namespace SkinWeightTools.EditorTools
             instance.name = prefab.name + " (SkinWeightTools)";
             Undo.RegisterCreatedObjectUndo(instance, "Import Skinned Mesh");
 
+            SkinFixerWorkspace workspace = SkinFixerWorkspace.FindInScene();
+
+            if (workspace != null && workspace.modelRoot != null)
+            {
+                instance.transform.SetParent(workspace.modelRoot, false);
+            }
+
             instance.GetComponentsInChildren<SkinnedMeshRenderer>(true, found);
             Selection.activeGameObject = instance;
+
+            if (workspace != null)
+            {
+                WorkspaceSceneBuilder.FrameModel(workspace);
+            }
 
             return found;
         }

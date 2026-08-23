@@ -108,6 +108,9 @@ namespace SkinWeightTools.EditorTools
 
         private void DrawSourceTab()
         {
+            DrawWorkspaceSection();
+
+            EditorGUILayout.Space();
             EditorGUILayout.LabelField("Import", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(
                 "FBX and USD use Unity's own importers. glTF and GLB need com.unity.cloud.gltfast.",
@@ -170,6 +173,61 @@ namespace SkinWeightTools.EditorTools
             {
                 RevertToOriginal();
             }
+        }
+
+        private void DrawWorkspaceSection()
+        {
+            EditorGUILayout.LabelField("Workspace", EditorStyles.boldLabel);
+
+            SkinFixerWorkspace workspace = SkinFixerWorkspace.FindInScene();
+
+            if (workspace == null)
+            {
+                EditorGUILayout.LabelField(
+                    "No workspace in this scene. Creating one gives you a neutral three light rig, a preview camera and a Models root that imports drop into.",
+                    EditorStyles.wordWrappedMiniLabel);
+
+                if (GUILayout.Button("Create workspace scene") == true)
+                {
+                    string createdPath = WorkspaceSceneBuilder.CreateWorkspaceScene(true);
+
+                    if (string.IsNullOrEmpty(createdPath) == false)
+                    {
+                        BindRenderer();
+                        statusMessage = "Workspace scene created at " + createdPath + ".";
+                    }
+                }
+
+                return;
+            }
+
+            EditorGUILayout.LabelField("Workspace", workspace.gameObject.name);
+
+            EditorGUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("Frame model") == true)
+            {
+                bool framed = WorkspaceSceneBuilder.FrameModel(workspace);
+
+                if (framed == false)
+                {
+                    statusMessage = "Nothing under the Models root to frame yet.";
+                }
+            }
+
+            if (workspace.groundPlane != null)
+            {
+                bool groundVisible = workspace.groundPlane.activeSelf;
+                bool nextVisible = GUILayout.Toggle(groundVisible, "Ground", EditorStyles.miniButton);
+
+                if (nextVisible != groundVisible)
+                {
+                    Undo.RecordObject(workspace.groundPlane, "Toggle Ground");
+                    workspace.SetGroundVisible(nextVisible);
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
         }
 
         private string DescribePackage(bool present)
