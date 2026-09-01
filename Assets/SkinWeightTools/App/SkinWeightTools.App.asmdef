@@ -1,0 +1,25 @@
+{
+    "name": "SkinWeightTools.App",
+    "rootNamespace": "SkinWeightTools.App",
+    "references": [
+        "SkinWeightTools",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "glTFast"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.cloud.gltfast",
+            "expression": "",
+            "define": "GLTFAST_PRESENT"
+        }
+    ],
+    "noEngineReferences": false
+}

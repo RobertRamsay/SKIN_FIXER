@@ -1,0 +1,19 @@
+{
+    "name": "SkinWeightTools.App.Editor",
+    "rootNamespace": "SkinWeightTools.App.EditorTools",
+    "references": [
+        "SkinWeightTools",
+        "SkinWeightTools.App"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
