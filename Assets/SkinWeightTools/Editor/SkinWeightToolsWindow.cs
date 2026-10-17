@@ -22,6 +22,7 @@ namespace SkinWeightTools.EditorTools
         private Mesh originalMesh = null;
         private Mesh workingMesh = null;
         private SkinWeightSet sourceSet = null;
+        private SkinWeightSet evenOutSet = null;
         private SkinWeightSet resultSet = null;
         private TopologyGraph topologyGraph = null;
 
@@ -588,6 +589,7 @@ namespace SkinWeightTools.EditorTools
         private void BindRenderer()
         {
             sourceSet = null;
+            evenOutSet = null;
             resultSet = null;
             topologyGraph = null;
             romReport = null;
@@ -648,7 +650,8 @@ namespace SkinWeightTools.EditorTools
 
             try
             {
-                resultSet = SkinWeightSolver.EvenOut(sourceSet, topologyGraph, evenOutSettings, null, ReportProgress);
+                evenOutSet = SkinWeightSolver.EvenOut(sourceSet, topologyGraph, evenOutSettings, null, ReportProgress);
+                resultSet = evenOutSet;
             }
             finally
             {
@@ -669,11 +672,13 @@ namespace SkinWeightTools.EditorTools
                 return;
             }
 
+            // Layers always start from the Even Out result, never from the last layer
+            // evaluation, so pressing Evaluate twice gives the same answer as pressing it once.
             SkinWeightSet baseSet = sourceSet;
 
-            if (resultSet != null)
+            if (evenOutSet != null)
             {
-                baseSet = resultSet;
+                baseSet = evenOutSet;
             }
 
             resultSet = layerStack.Evaluate(baseSet, topologyGraph);
@@ -707,6 +712,7 @@ namespace SkinWeightTools.EditorTools
             }
 
             MeshWeightWriter.AssignToRenderer(targetRenderer, originalMesh);
+            evenOutSet = null;
             resultSet = null;
             statusMessage = "Reverted to the imported mesh.";
             SceneView.RepaintAll();

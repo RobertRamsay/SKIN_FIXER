@@ -100,6 +100,11 @@ namespace SkinWeightTools
 
             for (int vertex = 0; vertex < vertexCount; vertex++)
             {
+                // Unity expects the heaviest influence first, and the GPU only reads the
+                // first QualitySettings.skinWeights entries. Smoothing rebuilds each vertex
+                // in dictionary order, so without this the wrong bones get dropped.
+                SortDescending(vertex);
+
                 List<BoneInfluence> source = influences[vertex];
                 perVertexCounts[vertex] = (byte)Mathf.Clamp(source.Count, 0, 255);
 

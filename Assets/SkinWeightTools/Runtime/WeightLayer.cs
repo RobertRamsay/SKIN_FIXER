@@ -75,6 +75,17 @@ namespace SkinWeightTools
                 }
 
                 SkinWeightSolver.SmoothWeights(target, graph, 1, strength, vertexMask);
+
+                // A smoothed vertex picks up every bone its neighbours carry, so trim it
+                // back to this layer's budget the way Tighten and Loosen already do.
+                for (int vertex = 0; vertex < target.vertexCount; vertex++)
+                {
+                    if (vertexMask[vertex] == true)
+                    {
+                        target.CullVertex(vertex, maxInfluences);
+                    }
+                }
+
                 return;
             }
 
